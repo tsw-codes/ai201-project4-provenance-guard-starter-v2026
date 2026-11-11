@@ -135,10 +135,10 @@ mistakes, and she used almost no punctuation beyond full stops and commas.
 | Step | What happens to her essay |
 |---|---|
 | Route, limiter, validation | Passes. 250 words is inside the limits. She gets a `content_id`. |
-| Signal one | Common words in predictable order give low perplexity. **Projected `model_score` ≈ 0.75** (to be replaced with a measured number, see below). |
-| Signal two | Sentences 9–14 words long give low spread. Vocabulary is narrow and there are no semicolons, dashes or questions. **Projected `style_score` ≈ 0.65.** |
-| Combine (placeholder 50/50 average) | (0.75 + 0.65) ÷ 2 = **0.70**. |
-| Label (placeholder thresholds 0.35 / 0.65) | 0.70 > 0.65, so **high-confidence AI**. |
+| Signal one | Common words in predictable order give low perplexity. **Measured: perplexity 13.7, `model_score` 0.8705.** That came from a 100-word plain, first-person paragraph in this style, run through `python detector.py "..."`. The starter's own AI-written sample scores 0.8864, so signal one barely tells them apart. |
+| Signal two | Sentences 9–14 words long give low spread. Vocabulary is narrow and there are no semicolons, dashes or questions. **Projected `style_score` ≈ 0.65** (not built yet). |
+| Combine (placeholder 50/50 average) | (0.87 + 0.65) ÷ 2 = **0.76**. |
+| Label (placeholder thresholds 0.35 / 0.65) | 0.76 > 0.65, so **high-confidence AI**. |
 
 **What the label says to her.** With the starter as shipped, it says
 "PLACEHOLDER". With any honest high-confidence AI wording, it says something
@@ -160,7 +160,10 @@ follow, and they are the starting position for Milestones 4 and 5:
    average.** It requires `model_score ≥ 0.70` **and** `style_score ≥ 0.70`.
    If either falls short, the combined score is capped just below the AI
    threshold, so the result is "unsure" at worst. Because of the shared blind
-   spot, this is a minimum and not a guarantee.
+   spot, this is a minimum and not a guarantee. With her measured 0.87 on
+   signal one, she is protected **only** if signal two stays below 0.70, so
+   signal two's calibration on plain human writing is what actually decides
+   her label.
 2. **The AI threshold rises from 0.65 to about 0.80.** That widens the unsure
    band on the AI side and costs more AI text getting through. A wrong
    accusation costs her far more than a missed detection costs the site.
