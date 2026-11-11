@@ -39,6 +39,26 @@
 <!-- The path a submission takes, from arriving to the label a reader sees.
      Six or seven steps — this is the trace you wrote in Milestone 1. -->
 
+1. **`POST /submit` receives JSON** (`app.py::submit`) and parses it into a
+   dict, or notices that it couldn't.
+2. **The rate limiter** (unit 8) counts the request against its `creator_id`,
+   or its address if there isn't one. Over the limit returns `429`, and the
+   rejection is logged.
+3. **Validation** checks that `text` (25 words to 20,000 characters) and
+   `creator_id` are present and sensible, then mints a `content_id`. Bad input
+   returns `400` with a specific error code and is logged.
+4. **Signal one** (`detector.model_signal`) has gpt2 measure how predictable
+   the first ~300 words are, giving `model_score`.
+5. **Signal two** (`stylometry.style_signal`) measures the text's shape
+   (sentence-length spread, vocabulary variety, punctuation variety), giving
+   `style_score`.
+6. **Scoring** (`scoring.combine_signals`, then `score_to_label`) produces the
+   combined score, a `guess`, and the sentence a reader sees.
+7. **The audit log** records all nine fields as `decided`. Then the response
+   goes back with the label, both scores and the `content_id` needed to appeal.
+
+Full trace, the false-positive walk-through and the endpoint contract:
+[PLAN.md](PLAN.md).
 
 
 ---
@@ -53,19 +73,40 @@
 
 ### Signal one — the model signal
 
-**What it measures:**
+**What it measures:** How predictable the text is to gpt2, measured as
+perplexity over the first 400 tokens and mapped to 0–1. Low perplexity gives
+a high score, which this signal treats as more AI-like.
 
-**Why that might differ between human and AI writing:**
+**Why that might differ between human and AI writing:** A model writes by
+picking likely next words, so its output is easy for a model to predict.
+People choose odd words, change direction and name specific things.
 
-**What it can't see:**
+**What it can't see:** Who wrote the text, as distinct from how ordinary it
+is. Plain human writing scores as machine-like: a second-language writer
+sticking to safe words, a younger writer, anyone writing simply. Ornate AI
+text scores as human. It also reads only the first ~300 words, so anything
+after that is invisible.
 
 ### Signal two — the style signal
 
-**What it measures:**
+**What it measures:** The text's shape, without reading it. It takes the mean
+of three measures, each scaled to 0–1 so that higher means more AI-like:
 
-**Why that might differ between human and AI writing:**
+- sentence-length spread (stdev ÷ mean, flipped)
+- vocabulary variety (type-token ratio over 50-word windows, flipped)
+- punctuation variety (semicolons, dashes, colons, parentheses, `?` and `!`
+  per 100 words, flipped)
 
-**What it can't see:**
+**Why that might differ between human and AI writing:** "Most likely next
+word" produces even, mid-length sentences, middle-of-the-road vocabulary and
+tidy punctuation. Human writing is lumpier.
+
+**What it can't see:** Meaning. Typos raise vocabulary variety, chopped-up
+sentences raise the spread, and a pasted quotation adds punctuation. Each
+moves the score without changing a word of substance. It has nothing to
+measure on a single sentence. Worst of all, plain, even human writing reads
+AI-like on this signal *and* on signal one. The two share the blind spot
+where a false positive hurts most.
 
 ### The combining rule
 
